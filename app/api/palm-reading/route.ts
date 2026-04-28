@@ -4,16 +4,54 @@ export const runtime = "nodejs";
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const SUPPORTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_FOCUS_AREAS = new Set([
+  "感情关系",
+  "事业发展",
+  "财富观念",
+  "学业成长",
+  "自我状态",
+  "人际贵人"
+]);
+const DEFAULT_FOCUS_AREAS = ["自我状态", "事业发展"];
+
+type PalmFeature = {
+  label: string;
+  fact: string;
+  insight: string;
+};
+
+type PalmScores = {
+  emotionalEnergy: number;
+  actionPower: number;
+  relationshipSensitivity: number;
+  stability: number;
+  creativity: number;
+};
 
 type PalmReading = {
+  summary: string;
   observations: string[];
+  palmFeatures: PalmFeature[];
+  scores: PalmScores;
   reading: {
     personality: string;
     relationships: string;
     career: string;
-    energy: string;
-    advice: string;
+    wealthMindset: string;
+    currentState: string;
+    focus: string;
   };
+  timeline: {
+    sevenDays: string;
+    thirtyDays: string;
+    ninetyDays: string;
+  };
+  luckyTips: {
+    color: string;
+    action: string;
+    keyword: string;
+  };
+  actionPlan: string[];
   comfort: string;
   disclaimer: string;
 };
@@ -26,7 +64,43 @@ function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/+$/, "");
 }
 
-function extractJson(raw: string): PalmReading {
+function coerceString(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function coerceStringArray(value: unknown, limit: number) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => coerceString(item))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function coerceScore(value: unknown) {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number)) return 66;
+  return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function parseFocusAreas(raw: FormDataEntryValue | null) {
+  if (typeof raw !== "string") return DEFAULT_FOCUS_AREAS;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_FOCUS_AREAS;
+
+    const focusAreas = parsed
+      .map((item) => coerceString(item))
+      .filter((item) => ALLOWED_FOCUS_AREAS.has(item))
+      .slice(0, 3);
+
+    return focusAreas.length ? focusAreas : DEFAULT_FOCUS_AREAS;
+  } catch {
+    return DEFAULT_FOCUS_AREAS;
+  }
+}
+
+function extractJson(raw: string): unknown {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced?.[1] ?? trimmed;
@@ -37,46 +111,97 @@ function extractJson(raw: string): PalmReading {
     throw new Error("Model response did not contain JSON.");
   }
 
-  return JSON.parse(candidate.slice(firstBrace, lastBrace + 1)) as PalmReading;
+  return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
 }
 
-function validateReading(reading: PalmReading): PalmReading {
-  if (!Array.isArray(reading.observations) || reading.observations.length === 0) {
+function validateReading(input: unknown): PalmReading {
+  const source = input as Partial<PalmReading>;
+  const reading = source.reading ?? ({} as PalmReading["reading"]);
+  const timeline = source.timeline ?? ({} as PalmReading["timeline"]);
+  const luckyTips = source.luckyTips ?? ({} as PalmReading["luckyTips"]);
+  const scores = source.scores ?? ({} as PalmScores);
+
+  const observations = coerceStringArray(source.observations, 8);
+  if (observations.length === 0) {
     throw new Error("Missing observations.");
   }
 
-  const requiredReadingKeys: Array<keyof PalmReading["reading"]> = [
-    "personality",
-    "relationships",
-    "career",
-    "energy",
-    "advice"
+  const palmFeatures = Array.isArray(source.palmFeatures)
+    ? source.palmFeatures
+        .map((feature) => {
+          const typed = feature as Partial<PalmFeature>;
+          return {
+            label: coerceString(typed.label),
+            fact: coerceString(typed.fact),
+            insight: coerceString(typed.insight)
+          };
+        })
+        .filter((feature) => feature.label && feature.fact && feature.insight)
+        .slice(0, 6)
+    : [];
+
+  if (palmFeatures.length === 0) {
+    throw new Error("Missing palm features.");
+  }
+
+  const result: PalmReading = {
+    summary: coerceString(source.summary),
+    observations,
+    palmFeatures,
+    scores: {
+      emotionalEnergy: coerceScore(scores.emotionalEnergy),
+      actionPower: coerceScore(scores.actionPower),
+      relationshipSensitivity: coerceScore(scores.relationshipSensitivity),
+      stability: coerceScore(scores.stability),
+      creativity: coerceScore(scores.creativity)
+    },
+    reading: {
+      personality: coerceString(reading.personality),
+      relationships: coerceString(reading.relationships),
+      career: coerceString(reading.career),
+      wealthMindset: coerceString(reading.wealthMindset),
+      currentState: coerceString(reading.currentState),
+      focus: coerceString(reading.focus)
+    },
+    timeline: {
+      sevenDays: coerceString(timeline.sevenDays),
+      thirtyDays: coerceString(timeline.thirtyDays),
+      ninetyDays: coerceString(timeline.ninetyDays)
+    },
+    luckyTips: {
+      color: coerceString(luckyTips.color),
+      action: coerceString(luckyTips.action),
+      keyword: coerceString(luckyTips.keyword)
+    },
+    actionPlan: coerceStringArray(source.actionPlan, 3),
+    comfort: coerceString(source.comfort),
+    disclaimer:
+      coerceString(source.disclaimer) ||
+      "本解析仅供娱乐和自我反思，不代表科学判断、医学诊断、法律建议、财务建议或确定性预测。"
+  };
+
+  const requiredStrings = [
+    result.summary,
+    result.reading.personality,
+    result.reading.relationships,
+    result.reading.career,
+    result.reading.wealthMindset,
+    result.reading.currentState,
+    result.reading.focus,
+    result.timeline.sevenDays,
+    result.timeline.thirtyDays,
+    result.timeline.ninetyDays,
+    result.luckyTips.color,
+    result.luckyTips.action,
+    result.luckyTips.keyword,
+    result.comfort
   ];
 
-  for (const key of requiredReadingKeys) {
-    if (typeof reading.reading?.[key] !== "string" || !reading.reading[key].trim()) {
-      throw new Error(`Missing reading.${key}.`);
-    }
+  if (requiredStrings.some((value) => !value) || result.actionPlan.length === 0) {
+    throw new Error("Incomplete reading.");
   }
 
-  if (typeof reading.comfort !== "string" || !reading.comfort.trim()) {
-    throw new Error("Missing comfort.");
-  }
-
-  return {
-    observations: reading.observations.slice(0, 8).map(String),
-    reading: {
-      personality: reading.reading.personality,
-      relationships: reading.reading.relationships,
-      career: reading.reading.career,
-      energy: reading.reading.energy,
-      advice: reading.reading.advice
-    },
-    comfort: reading.comfort,
-    disclaimer:
-      reading.disclaimer ||
-      "本解析仅供娱乐和自我反思，不代表科学判断、医学诊断或确定性预测。"
-  };
+  return result;
 }
 
 export async function POST(request: Request) {
@@ -90,6 +215,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("image");
+  const focusAreas = parseFocusAreas(formData.get("focusAreas"));
 
   if (!(file instanceof File)) {
     return jsonError("请上传一张手掌照片。", 400);
@@ -115,21 +241,59 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       model,
       temperature: 0.82,
-      max_tokens: 1200,
+      max_tokens: 2200,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "你是一个温暖、细致、有边界感的中文娱乐向手相解析师。你可以观察用户上传的手掌照片中可见的客观视觉特征，再基于传统手相语境做自我启发式解读。不得声称能确定预测命运、疾病、财富或婚姻结果。不得做医学诊断、法律建议、财务建议。语气要真诚、具体、鼓励，情绪价值高，但不要夸张恐吓。只输出合法 JSON。"
+            "你是一个温暖、细致、有边界感的中文娱乐向手相解析师。你必须先描述照片中可见的客观事实，再基于传统手相语境做自我启发式解读。你不能声称能确定预测命运、疾病、寿命、财富、婚姻结果或考试结果。你不能提供医学诊断、法律建议、投资建议。语气要真诚、具体、鼓励，情绪价值高，但不要恐吓、夸大或制造焦虑。只输出合法 JSON，不要输出 Markdown。"
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text:
-                "请分析这张手掌照片。输出 JSON，字段必须为：observations 字符串数组；reading 对象，包含 personality、relationships、career、energy、advice 五个字符串；comfort 字符串；disclaimer 字符串。observations 只写照片中能看见的事实，reading 和 comfort 写娱乐向、温暖陪伴式解读。"
+              text: `请分析这张手掌照片。用户关注点：${focusAreas.join("、")}。
+
+输出 JSON，字段必须完整：
+{
+  "summary": "一句话总体画像，温暖但不夸张",
+  "observations": ["3-8 条照片中能看见的客观事实，不写推测"],
+  "palmFeatures": [
+    {"label": "掌型/生命线/智慧线/感情线/事业线/指型/掌丘等", "fact": "可见事实", "insight": "娱乐向启发"}
+  ],
+  "scores": {
+    "emotionalEnergy": 0-100,
+    "actionPower": 0-100,
+    "relationshipSensitivity": 0-100,
+    "stability": 0-100,
+    "creativity": 0-100
+  },
+  "reading": {
+    "personality": "性格底色",
+    "relationships": "感情关系",
+    "career": "事业发展",
+    "wealthMindset": "财富观念，只能写消费/规划倾向，不能承诺发财",
+    "currentState": "近期状态",
+    "focus": "围绕用户关注点的专项解读"
+  },
+  "timeline": {
+    "sevenDays": "未来 7 天行动建议",
+    "thirtyDays": "未来 30 天行动建议",
+    "ninetyDays": "未来 90 天行动建议"
+  },
+  "luckyTips": {
+    "color": "幸运色",
+    "action": "适合做的一件小事",
+    "keyword": "提醒关键词"
+  },
+  "actionPlan": ["3 条具体可执行建议"],
+  "comfort": "高情绪价值总结",
+  "disclaimer": "仅供娱乐和自我反思，不代表科学判断、医学诊断、法律建议、财务建议或确定性预测。"
+}
+
+要求：observations 和 palmFeatures.fact 只能写照片可见事实；其他内容必须是娱乐向、自我启发式表达。`
             },
             {
               type: "image_url",
