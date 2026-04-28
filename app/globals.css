@@ -321,6 +321,63 @@ h1 {
   max-width: 880px;
 }
 
+.exportBar {
+  align-items: flex-start;
+  background: #fbf8f5;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  margin-bottom: 24px;
+  padding: 16px;
+}
+
+.exportBar strong,
+.exportBar span {
+  display: block;
+}
+
+.exportBar strong {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.exportBar span,
+.exportBar p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.exportBar p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.exportActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.exportActions button {
+  background: #fff;
+  border: 1px solid #d9c9be;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.exportActions button:hover {
+  border-color: var(--rose);
+  color: var(--rose-dark);
+}
+
 .reportBand {
   display: grid;
   gap: 12px;
@@ -554,6 +611,7 @@ blockquote {
 
   .hero,
   .guide,
+  .exportBar,
   .reportBand,
   .facts ul,
   .featureGrid,
@@ -577,6 +635,10 @@ blockquote {
   .result {
     padding: 20px;
   }
+
+  .exportActions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
@@ -598,5 +660,46 @@ blockquote {
 
   .scorePanel span {
     grid-column: 1 / -1;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .hero,
+  .guide,
+  .exportBar {
+    display: none;
+  }
+
+  .shell {
+    max-width: none;
+    min-height: auto;
+    padding: 0;
+  }
+
+  .result {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .featureGrid,
+  .readingGrid,
+  .timeline > div {
+    grid-template-columns: 1fr;
+  }
+
+  .reportBand,
+  .facts li,
+  .scorePanel > div,
+  .featureGrid article,
+  .readingGrid article,
+  .timeline article,
+  .actionPlan li,
+  blockquote {
+    break-inside: avoid;
   }
 }

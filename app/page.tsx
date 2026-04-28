@@ -81,6 +81,75 @@ const timelineSections: Array<{
   { key: "ninetyDays", title: "90 天" }
 ];
 
+function formatReportAsText(reading: PalmReading) {
+  const scoreText = scoreSections
+    .map((section) => `${section.title}：${reading.scores[section.key]}/100`)
+    .join("\n");
+  const features = reading.palmFeatures
+    .map((feature) => `【${feature.label}】\n事实：${feature.fact}\n启发：${feature.insight}`)
+    .join("\n\n");
+  const readings = readingSections
+    .map((section) => `【${section.title}】\n${reading.reading[section.key]}`)
+    .join("\n\n");
+  const timeline = timelineSections
+    .map((section) => `${section.title}：${reading.timeline[section.key]}`)
+    .join("\n");
+
+  return [
+    "掌心小读｜掌心报告",
+    "",
+    reading.summary,
+    "",
+    "幸运提示",
+    `幸运色：${reading.luckyTips.color}`,
+    `适合行动：${reading.luckyTips.action}`,
+    `提醒关键词：${reading.luckyTips.keyword}`,
+    "",
+    "我从照片里看到的事实",
+    ...reading.observations.map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "娱乐向能量评分",
+    scoreText,
+    "",
+    "掌纹细项",
+    features,
+    "",
+    "详细解读",
+    readings,
+    "",
+    "接下来的节奏",
+    timeline,
+    "",
+    "行动清单",
+    ...reading.actionPlan.map((item, index) => `${index + 1}. ${item}`),
+    "",
+    "给你的温暖提醒",
+    reading.comfort,
+    "",
+    reading.disclaimer
+  ].join("\n");
+}
+
+function formatShareText(reading: PalmReading) {
+  return [
+    "我的掌心小读报告",
+    reading.summary,
+    `关键词：${reading.luckyTips.keyword}`,
+    `适合行动：${reading.luckyTips.action}`,
+    reading.disclaimer
+  ].join("\n");
+}
+
+function downloadTextFile(filename: string, content: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -88,6 +157,7 @@ export default function Home() {
   const [focusAreas, setFocusAreas] = useState<string[]>(["自我状态", "事业发展"]);
   const [reading, setReading] = useState<PalmReading | null>(null);
   const [error, setError] = useState("");
+  const [exportStatus, setExportStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const fileHint = useMemo(() => {
@@ -100,6 +170,7 @@ export default function Home() {
   function setSelectedFile(nextFile: File | null) {
     setError("");
     setReading(null);
+    setExportStatus("");
 
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -160,6 +231,7 @@ export default function Home() {
     setIsLoading(true);
     setError("");
     setReading(null);
+    setExportStatus("");
 
     const body = new FormData();
     body.append("image", file);
@@ -182,6 +254,59 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function exportTxt() {
+    if (!reading) return;
+    downloadTextFile("掌心小读-分析报告.txt", formatReportAsText(reading), "text/plain;charset=utf-8");
+    setExportStatus("TXT 报告已导出。");
+  }
+
+  function exportJson() {
+    if (!reading) return;
+    downloadTextFile(
+      "掌心小读-分析报告.json",
+      JSON.stringify(reading, null, 2),
+      "application/json;charset=utf-8"
+    );
+    setExportStatus("JSON 数据已导出。");
+  }
+
+  async function copySummary() {
+    if (!reading) return;
+
+    try {
+      await navigator.clipboard.writeText(formatShareText(reading));
+      setExportStatus("分享摘要已复制。");
+    } catch {
+      setExportStatus("复制失败，请手动选择报告内容复制。");
+    }
+  }
+
+  async function nativeShare() {
+    if (!reading) return;
+    const text = formatShareText(reading);
+
+    if (!navigator.share) {
+      await copySummary();
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: "掌心小读报告",
+        text
+      });
+      setExportStatus("已打开系统分享。");
+    } catch {
+      setExportStatus("分享已取消或暂不可用。");
+    }
+  }
+
+  function printReport() {
+    if (!reading) return;
+    setExportStatus("正在打开打印窗口，可选择“另存为 PDF”。");
+    window.setTimeout(() => window.print(), 80);
   }
 
   return (
@@ -285,6 +410,31 @@ export default function Home() {
           <div className="resultHeader">
             <p className="kicker">掌心报告</p>
             <h2>{reading.summary}</h2>
+          </div>
+
+          <div className="exportBar">
+            <div>
+              <strong>分享与导出</strong>
+              <span>支持 TXT、JSON、打印另存 PDF、复制摘要和系统分享。</span>
+            </div>
+            <div className="exportActions">
+              <button onClick={exportTxt} type="button">
+                导出 TXT
+              </button>
+              <button onClick={exportJson} type="button">
+                导出 JSON
+              </button>
+              <button onClick={printReport} type="button">
+                打印/PDF
+              </button>
+              <button onClick={copySummary} type="button">
+                复制摘要
+              </button>
+              <button onClick={nativeShare} type="button">
+                系统分享
+              </button>
+            </div>
+            {exportStatus ? <p>{exportStatus}</p> : null}
           </div>
 
           <div className="reportBand">
