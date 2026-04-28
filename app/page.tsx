@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type PalmFeature = {
   label: string;
@@ -42,11 +42,36 @@ type PalmReading = {
   disclaimer: string;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  tips?: string[];
+  createdAt: string;
+};
+
+type SavedReport = {
+  id: string;
+  createdAt: string;
+  focusAreas: string[];
+  reading: PalmReading;
+  chatMessages: ChatMessage[];
+};
+
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FOCUS_AREAS = 3;
+const MAX_SAVED_REPORTS = 5;
+const MAX_CHAT_MESSAGES = 20;
+const STORAGE_KEY = "palm-reading-reports-v1";
 
 const focusOptions = ["感情关系", "事业发展", "财富观念", "学业成长", "自我状态", "人际贵人"];
+const quickQuestions = [
+  "这份报告里最该听进去的一句话是什么？",
+  "最近感情关系上我该注意什么？",
+  "事业上我适合主动一点吗？",
+  "接下来 7 天最适合做哪件小事？"
+];
 
 const scoreSections: Array<{
   key: keyof PalmReading["scores"];
@@ -81,7 +106,7 @@ const timelineSections: Array<{
   { key: "ninetyDays", title: "90 天" }
 ];
 
-function formatReportAsText(reading: PalmReading) {
+function formatReportAsText(reading: PalmReading, chatMessages: ChatMessage[] = []) {
   const scoreText = scoreSections
     .map((section) => `${section.title}：${reading.scores[section.key]}/100`)
     .join("\n");
@@ -126,7 +151,9 @@ function formatReportAsText(reading: PalmReading) {
     "给你的温暖提醒",
     reading.comfort,
     "",
-    reading.disclaimer
+    reading.disclaimer,
+    "",
+    ...formatChatMessages(chatMessages)
   ].join("\n");
 }
 
@@ -150,12 +177,47 @@ function downloadTextFile(filename: string, content: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
+function formatChatMessages(chatMessages: ChatMessage[]) {
+  if (chatMessages.length === 0) return [];
+
+  return [
+    "追问记录",
+    ...chatMessages.map((message) => {
+      const prefix = message.role === "user" ? "我问" : "掌心小读答";
+      const tips =
+        message.tips && message.tips.length
+          ? `\n建议：${message.tips.map((tip, index) => `${index + 1}. ${tip}`).join(" ")}`
+          : "";
+      return `【${prefix}】${message.content}${tips}`;
+    })
+  ];
+}
+
+function createId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [focusAreas, setFocusAreas] = useState<string[]>(["自我状态", "事业发展"]);
   const [reading, setReading] = useState<PalmReading | null>(null);
+  const [currentReportId, setCurrentReportId] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatError, setChatError] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [error, setError] = useState("");
   const [exportStatus, setExportStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -167,10 +229,52 @@ export default function Home() {
 
   const selectedFocusText = focusAreas.length ? focusAreas.join("、") : "未选择";
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as SavedReport[];
+      if (Array.isArray(parsed)) {
+        setSavedReports(parsed.slice(0, MAX_SAVED_REPORTS));
+      }
+    } catch {
+      setSavedReports([]);
+    }
+  }, []);
+
+  function persistReports(nextReports: SavedReport[]) {
+    const limited = nextReports.slice(0, MAX_SAVED_REPORTS);
+    setSavedReports(limited);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(limited));
+  }
+
+  function saveReportSnapshot(
+    nextReading: PalmReading,
+    nextFocusAreas: string[],
+    nextChatMessages: ChatMessage[],
+    reportId = currentReportId || createId()
+  ) {
+    const id = reportId;
+    const savedReport: SavedReport = {
+      id,
+      createdAt: new Date().toISOString(),
+      focusAreas: nextFocusAreas,
+      reading: nextReading,
+      chatMessages: nextChatMessages.slice(-MAX_CHAT_MESSAGES)
+    };
+
+    setCurrentReportId(id);
+    persistReports([savedReport, ...savedReports.filter((item) => item.id !== id)]);
+  }
+
   function setSelectedFile(nextFile: File | null) {
     setError("");
     setReading(null);
     setExportStatus("");
+    setCurrentReportId("");
+    setChatMessages([]);
+    setChatInput("");
+    setChatError("");
 
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -232,6 +336,10 @@ export default function Home() {
     setError("");
     setReading(null);
     setExportStatus("");
+    setCurrentReportId("");
+    setChatMessages([]);
+    setChatInput("");
+    setChatError("");
 
     const body = new FormData();
     body.append("image", file);
@@ -248,7 +356,10 @@ export default function Home() {
         throw new Error(payload?.error ?? "解析失败，请稍后重试。");
       }
 
-      setReading(payload as PalmReading);
+      const nextReading = payload as PalmReading;
+      const nextReportId = createId();
+      setReading(nextReading);
+      saveReportSnapshot(nextReading, focusAreas, [], nextReportId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "解析失败，请稍后重试。");
     } finally {
@@ -258,7 +369,7 @@ export default function Home() {
 
   function exportTxt() {
     if (!reading) return;
-    downloadTextFile("掌心小读-分析报告.txt", formatReportAsText(reading), "text/plain;charset=utf-8");
+    downloadTextFile("掌心小读-分析报告.txt", formatReportAsText(reading, chatMessages), "text/plain;charset=utf-8");
     setExportStatus("TXT 报告已导出。");
   }
 
@@ -266,7 +377,7 @@ export default function Home() {
     if (!reading) return;
     downloadTextFile(
       "掌心小读-分析报告.json",
-      JSON.stringify(reading, null, 2),
+      JSON.stringify({ reading, focusAreas, chatMessages }, null, 2),
       "application/json;charset=utf-8"
     );
     setExportStatus("JSON 数据已导出。");
@@ -307,6 +418,89 @@ export default function Home() {
     if (!reading) return;
     setExportStatus("正在打开打印窗口，可选择“另存为 PDF”。");
     window.setTimeout(() => window.print(), 80);
+  }
+
+  async function submitChat(questionOverride?: string) {
+    if (!reading || isChatLoading) return;
+
+    const question = (questionOverride ?? chatInput).trim();
+    if (!question) {
+      setChatError("请输入想追问的问题。");
+      return;
+    }
+
+    const userMessage: ChatMessage = {
+      id: createId(),
+      role: "user",
+      content: question,
+      createdAt: new Date().toISOString()
+    };
+    const nextMessages = [...chatMessages, userMessage].slice(-MAX_CHAT_MESSAGES);
+
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatError("");
+    setIsChatLoading(true);
+
+    try {
+      const response = await fetch("/api/palm-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          report: reading,
+          question,
+          focusAreas
+        })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error ?? "追问失败，请稍后重试。");
+      }
+
+      const assistantMessage: ChatMessage = {
+        id: createId(),
+        role: "assistant",
+        content: payload.answer,
+        tips: Array.isArray(payload.tips) ? payload.tips : [],
+        createdAt: new Date().toISOString()
+      };
+      const completedMessages = [...nextMessages, assistantMessage].slice(-MAX_CHAT_MESSAGES);
+      setChatMessages(completedMessages);
+      saveReportSnapshot(reading, focusAreas, completedMessages);
+    } catch (caught) {
+      setChatMessages(chatMessages);
+      setChatError(caught instanceof Error ? caught.message : "追问失败，请稍后重试。");
+    } finally {
+      setIsChatLoading(false);
+    }
+  }
+
+  function loadSavedReport(savedReport: SavedReport) {
+    setReading(savedReport.reading);
+    setCurrentReportId(savedReport.id);
+    setFocusAreas(savedReport.focusAreas);
+    setChatMessages(savedReport.chatMessages ?? []);
+    setChatInput("");
+    setChatError("");
+    setError("");
+    setExportStatus("已载入本地历史报告。");
+  }
+
+  function deleteSavedReport(id: string) {
+    const nextReports = savedReports.filter((item) => item.id !== id);
+    persistReports(nextReports);
+
+    if (currentReportId === id) {
+      setCurrentReportId("");
+    }
+  }
+
+  function clearSavedReports() {
+    persistReports([]);
+    setExportStatus("本地历史报告已清空。");
   }
 
   return (
@@ -404,6 +598,42 @@ export default function Home() {
           <p>结果只做娱乐和自我反思，不替代专业建议。</p>
         </div>
       </section>
+
+      {savedReports.length ? (
+        <section className="historyPanel">
+          <div className="historyHeader">
+            <div>
+              <p className="kicker">本地历史</p>
+              <h2>当前浏览器保存了 {savedReports.length} 份报告</h2>
+              <span>仅保存在这台设备的浏览器里，不会上传到服务器。</span>
+            </div>
+            <button onClick={clearSavedReports} type="button">
+              清空历史
+            </button>
+          </div>
+          <div className="historyList">
+            {savedReports.map((savedReport) => (
+              <article key={savedReport.id}>
+                <div>
+                  <strong>{savedReport.reading.summary}</strong>
+                  <span>
+                    {formatDateTime(savedReport.createdAt)} · {savedReport.focusAreas.join("、")} ·{" "}
+                    {savedReport.chatMessages.length} 条追问
+                  </span>
+                </div>
+                <div>
+                  <button onClick={() => loadSavedReport(savedReport)} type="button">
+                    查看
+                  </button>
+                  <button onClick={() => deleteSavedReport(savedReport.id)} type="button">
+                    删除
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {reading ? (
         <section className="result" aria-live="polite">
@@ -522,6 +752,66 @@ export default function Home() {
 
           <blockquote>{reading.comfort}</blockquote>
           <p className="disclaimer">{reading.disclaimer}</p>
+
+          <section className="chatPanel">
+            <div className="chatHeader">
+              <div>
+                <p className="kicker">继续追问</p>
+                <h3>围绕这份报告，再问得具体一点</h3>
+                <span>追问会调用一次模型，只基于当前报告回答，不重新上传图片。</span>
+              </div>
+            </div>
+
+            <div className="quickQuestions">
+              {quickQuestions.map((question) => (
+                <button
+                  disabled={isChatLoading}
+                  key={question}
+                  onClick={() => submitChat(question)}
+                  type="button"
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+
+            {chatMessages.length ? (
+              <div className="chatMessages">
+                {chatMessages.map((message) => (
+                  <article className={message.role} key={message.id}>
+                    <span>{message.role === "user" ? "我问" : "掌心小读"}</span>
+                    <p>{message.content}</p>
+                    {message.tips?.length ? (
+                      <ul>
+                        {message.tips.map((tip, index) => (
+                          <li key={`${message.id}-${tip}-${index}`}>{tip}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : null}
+
+            <form
+              className="chatComposer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitChat();
+              }}
+            >
+              <input
+                maxLength={240}
+                onChange={(event) => setChatInput(event.target.value)}
+                placeholder="例如：我最近在事业上最该避免什么？"
+                value={chatInput}
+              />
+              <button disabled={isChatLoading} type="submit">
+                {isChatLoading ? "回答中..." : "发送"}
+              </button>
+            </form>
+            {chatError ? <p className="error">{chatError}</p> : null}
+          </section>
         </section>
       ) : null}
     </main>
