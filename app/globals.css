@@ -307,6 +307,71 @@ h1 {
   padding: 10px 12px;
 }
 
+.failurePanel {
+  background: #fff7ef;
+  border: 1px solid #e6c2a6;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.failurePanel strong,
+.failurePanel span,
+.failurePanel small {
+  display: block;
+}
+
+.failurePanel strong {
+  color: #7e2d3d;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.failurePanel p {
+  color: var(--ink);
+  line-height: 1.65;
+  margin-bottom: 6px;
+}
+
+.failurePanel span,
+.failurePanel small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.failureActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.failureActions button {
+  background: #fff;
+  border: 1px solid #d9a989;
+  border-radius: 8px;
+  color: #7e2d3d;
+  font-size: 14px;
+  font-weight: 900;
+  min-height: 40px;
+  padding: 0 13px;
+}
+
+.failureActions button:first-child {
+  background: var(--rose);
+  border-color: var(--rose);
+  color: #fff;
+}
+
+.failureActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.failurePanel.compact {
+  margin-top: 12px;
+}
+
 .guide {
   display: grid;
   gap: 16px;

@@ -18,6 +18,17 @@ const ALLOWED_SITUATIONS = new Set(["工作中", "学生", "创业", "情感困�
 const ALLOWED_STYLES = new Set(["温柔鼓励", "直接清醒", "玄学沉浸", "理性分析"]);
 const DEFAULT_FOCUS_AREAS = ["自我状态", "事业发展"];
 
+function logPalmReading(event: string, detail: Record<string, unknown>) {
+  console.info(
+    JSON.stringify({
+      scope: "palm-reading",
+      event,
+      at: new Date().toISOString(),
+      ...detail
+    })
+  );
+}
+
 type PalmFeature = {
   label: string;
   fact: string;
@@ -157,13 +168,25 @@ async function fetchModel(url: string, init: RequestInit) {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const startedAt = Date.now();
     try {
       const response = await fetchWithTimeout(url, init, MODEL_TIMEOUT_MS);
+      logPalmReading("model_attempt", {
+        attempt: attempt + 1,
+        status: response.status,
+        ok: response.ok,
+        durationMs: Date.now() - startedAt
+      });
       if (response.ok || (response.status >= 400 && response.status < 500)) {
         return response;
       }
       lastError = new Error(`Model returned ${response.status}.`);
     } catch (error) {
+      logPalmReading("model_attempt_error", {
+        attempt: attempt + 1,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error)
+      });
       lastError = error;
     }
   }
@@ -317,6 +340,15 @@ export async function POST(request: Request) {
   const currentSituation = coerceAllowed(formData.get("currentSituation"), ALLOWED_SITUATIONS, "探索方向");
   const readingStyle = coerceAllowed(formData.get("readingStyle"), ALLOWED_STYLES, "温柔鼓励");
 
+  logPalmReading("request_received", {
+    focusAreas,
+    handPreference,
+    currentSituation,
+    readingStyle,
+    fileType: file instanceof File ? file.type : "missing",
+    fileSize: file instanceof File ? file.size : 0
+  });
+
   if (!(file instanceof File)) {
     return jsonError("请上传一张手掌照片。", 400);
   }
@@ -422,11 +454,18 @@ export async function POST(request: Request) {
         ]
       })
     });
-  } catch {
+  } catch (error) {
+    logPalmReading("model_request_failed", {
+      error: error instanceof Error ? error.message : String(error)
+    });
     return jsonError("模型连接超时或网络不稳定，请稍后重试。", 504);
   }
 
   if (!response.ok) {
+    logPalmReading("model_bad_status", {
+      status: response.status,
+      statusText: response.statusText
+    });
     return jsonError("模型服务暂时没有返回有效结果，请稍后重试。", 502);
   }
 
@@ -434,12 +473,24 @@ export async function POST(request: Request) {
   const content = payload?.choices?.[0]?.message?.content;
 
   if (typeof content !== "string") {
+    logPalmReading("model_missing_content", {
+      choiceCount: Array.isArray(payload?.choices) ? payload.choices.length : 0
+    });
     return jsonError("模型结果格式异常，请稍后重试。", 502);
   }
 
   try {
-    return NextResponse.json(validateReading(extractJson(content)));
-  } catch {
+    const validated = validateReading(extractJson(content));
+    logPalmReading("request_succeeded", {
+      keywordCount: validated.keywords.length,
+      observationCount: validated.observations.length
+    });
+    return NextResponse.json(validated);
+  } catch (error) {
+    logPalmReading("model_parse_failed", {
+      error: error instanceof Error ? error.message : String(error),
+      contentPreview: content.slice(0, 240)
+    });
     return jsonError("模型结果解析失败，请换一张更清晰的照片重试。", 502);
   }
 }

@@ -5,6 +5,17 @@ export const runtime = "nodejs";
 const MAX_QUESTION_LENGTH = 240;
 const MODEL_TIMEOUT_MS = 30000;
 
+function logPalmChat(event: string, detail: Record<string, unknown>) {
+  console.info(
+    JSON.stringify({
+      scope: "palm-chat",
+      event,
+      at: new Date().toISOString(),
+      ...detail
+    })
+  );
+}
+
 type PalmChatResponse = {
   answer: string;
   tips: string[];
@@ -55,13 +66,25 @@ async function fetchModel(url: string, init: RequestInit) {
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const startedAt = Date.now();
     try {
       const response = await fetchWithTimeout(url, init, MODEL_TIMEOUT_MS);
+      logPalmChat("model_attempt", {
+        attempt: attempt + 1,
+        status: response.status,
+        ok: response.ok,
+        durationMs: Date.now() - startedAt
+      });
       if (response.ok || (response.status >= 400 && response.status < 500)) {
         return response;
       }
       lastError = new Error(`Model returned ${response.status}.`);
     } catch (error) {
+      logPalmChat("model_attempt_error", {
+        attempt: attempt + 1,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error)
+      });
       lastError = error;
     }
   }
@@ -116,6 +139,14 @@ export async function POST(request: Request) {
     return jsonError("缺少当前掌心报告，无法继续追问。", 400);
   }
 
+  logPalmChat("request_received", {
+    questionLength: question.length,
+    focusAreas,
+    handPreference,
+    currentSituation,
+    readingStyle
+  });
+
   let response: Response;
 
   try {
@@ -159,11 +190,18 @@ ${question}
         ]
       })
     });
-  } catch {
+  } catch (error) {
+    logPalmChat("model_request_failed", {
+      error: error instanceof Error ? error.message : String(error)
+    });
     return jsonError("追问模型连接超时或网络不稳定，请稍后重试。", 504);
   }
 
   if (!response.ok) {
+    logPalmChat("model_bad_status", {
+      status: response.status,
+      statusText: response.statusText
+    });
     return jsonError("追问服务暂时没有返回有效结果，请稍后重试。", 502);
   }
 
@@ -171,12 +209,24 @@ ${question}
   const content = payload?.choices?.[0]?.message?.content;
 
   if (typeof content !== "string") {
+    logPalmChat("model_missing_content", {
+      choiceCount: Array.isArray(payload?.choices) ? payload.choices.length : 0
+    });
     return jsonError("追问结果格式异常，请稍后重试。", 502);
   }
 
   try {
-    return NextResponse.json(validateChatResponse(extractJson(content)));
-  } catch {
+    const validated = validateChatResponse(extractJson(content));
+    logPalmChat("request_succeeded", {
+      answerLength: validated.answer.length,
+      tipCount: validated.tips.length
+    });
+    return NextResponse.json(validated);
+  } catch (error) {
+    logPalmChat("model_parse_failed", {
+      error: error instanceof Error ? error.message : String(error),
+      contentPreview: content.slice(0, 240)
+    });
     return jsonError("追问结果解析失败，请换个问法再试。", 502);
   }
 }

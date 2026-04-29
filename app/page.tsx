@@ -77,6 +77,8 @@ type SavedReport = {
   chatMessages: ChatMessage[];
 };
 
+type FailureKind = "none" | "network" | "model" | "parse" | "input";
+
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
 const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FOCUS_AREAS = 3;
@@ -257,6 +259,14 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function classifyFailure(message: string): FailureKind {
+  if (!message) return "none";
+  if (message.includes("超时") || message.includes("网络")) return "network";
+  if (message.includes("模型服务")) return "model";
+  if (message.includes("解析失败") || message.includes("格式异常")) return "parse";
+  return "input";
+}
+
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -273,6 +283,9 @@ export default function Home() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [error, setError] = useState("");
+  const [failureKind, setFailureKind] = useState<FailureKind>("none");
+  const [chatFailureKind, setChatFailureKind] = useState<FailureKind>("none");
+  const [lastChatQuestion, setLastChatQuestion] = useState("");
   const [exportStatus, setExportStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -327,12 +340,14 @@ export default function Home() {
 
   function setSelectedFile(nextFile: File | null) {
     setError("");
+    setFailureKind("none");
     setReading(null);
     setExportStatus("");
     setCurrentReportId("");
     setChatMessages([]);
     setChatInput("");
     setChatError("");
+    setChatFailureKind("none");
 
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -368,6 +383,7 @@ export default function Home() {
 
   function toggleFocusArea(option: string) {
     setError("");
+    setFailureKind("none");
 
     if (focusAreas.includes(option)) {
       setFocusAreas((current) => current.filter((item) => item !== option));
@@ -382,16 +398,18 @@ export default function Home() {
     setFocusAreas((current) => [...current, option]);
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
 
     if (!file) {
       setError("先上传一张清晰的手掌照片。");
+      setFailureKind("input");
       return;
     }
 
     setIsLoading(true);
     setError("");
+    setFailureKind("none");
     setReading(null);
     setExportStatus("");
     setCurrentReportId("");
@@ -426,7 +444,9 @@ export default function Home() {
         readingStyle
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "解析失败，请稍后重试。");
+      const message = caught instanceof Error ? caught.message : "解析失败，请稍后重试。";
+      setError(message);
+      setFailureKind(classifyFailure(message));
     } finally {
       setIsLoading(false);
     }
@@ -491,6 +511,7 @@ export default function Home() {
     const question = (questionOverride ?? chatInput).trim();
     if (!question) {
       setChatError("请输入想追问的问题。");
+      setChatFailureKind("input");
       return;
     }
 
@@ -505,6 +526,8 @@ export default function Home() {
     setChatMessages(nextMessages);
     setChatInput("");
     setChatError("");
+    setChatFailureKind("none");
+    setLastChatQuestion(question);
     setIsChatLoading(true);
 
     try {
@@ -543,8 +566,10 @@ export default function Home() {
         readingStyle
       });
     } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "追问失败，请稍后重试。";
       setChatMessages(chatMessages);
-      setChatError(caught instanceof Error ? caught.message : "追问失败，请稍后重试。");
+      setChatError(message);
+      setChatFailureKind(classifyFailure(message));
     } finally {
       setIsChatLoading(false);
     }
@@ -560,7 +585,9 @@ export default function Home() {
     setChatMessages(savedReport.chatMessages ?? []);
     setChatInput("");
     setChatError("");
+    setChatFailureKind("none");
     setError("");
+    setFailureKind("none");
     setExportStatus("已载入本地历史报告。");
   }
 
@@ -576,6 +603,20 @@ export default function Home() {
   function clearSavedReports() {
     persistReports([]);
     setExportStatus("本地历史报告已清空。");
+  }
+
+  function renderFailureTitle(kind: FailureKind) {
+    if (kind === "network") return "模型连接超时";
+    if (kind === "model") return "模型服务暂时不可用";
+    if (kind === "parse") return "模型结果需要重试";
+    return "操作没有完成";
+  }
+
+  function renderFailureHint(kind: FailureKind) {
+    if (kind === "network") return "这通常是模型接口响应慢、网络波动或代理连接不稳定，不是照片本身的问题。";
+    if (kind === "model") return "后台已经自动重试过一次，但模型服务仍没有返回可用结果。";
+    if (kind === "parse") return "模型返回了不完整内容，重新生成通常可以恢复。";
+    return "请检查输入内容后再试一次。";
   }
 
   return (
@@ -688,7 +729,26 @@ export default function Home() {
             {isLoading ? "正在生成完整报告..." : "开始解析"}
           </button>
 
-          {error ? <p className="error">{error}</p> : null}
+          {error && failureKind !== "input" ? (
+            <div className="failurePanel">
+              <div>
+                <strong>{renderFailureTitle(failureKind)}</strong>
+                <p>{error}</p>
+                <span>{renderFailureHint(failureKind)}</span>
+              </div>
+              <div className="failureActions">
+                <button disabled={!file || isLoading} onClick={() => handleSubmit()} type="button">
+                  {isLoading ? "重试中..." : "重新解析"}
+                </button>
+                <button onClick={() => inputRef.current?.click()} type="button">
+                  换张照片
+                </button>
+              </div>
+              <small>后台已记录本次失败日志，可在本地日志或 Vercel Function Logs 中查看。</small>
+            </div>
+          ) : null}
+
+          {error && failureKind === "input" ? <p className="error">{error}</p> : null}
         </form>
       </section>
 
@@ -980,7 +1040,25 @@ export default function Home() {
                 {isChatLoading ? "回答中..." : "发送"}
               </button>
             </form>
-            {chatError ? <p className="error">{chatError}</p> : null}
+            {chatError && chatFailureKind !== "input" ? (
+              <div className="failurePanel compact">
+                <div>
+                  <strong>{renderFailureTitle(chatFailureKind)}</strong>
+                  <p>{chatError}</p>
+                  <span>{renderFailureHint(chatFailureKind)}</span>
+                </div>
+                <div className="failureActions">
+                  <button
+                    disabled={!lastChatQuestion || isChatLoading}
+                    onClick={() => submitChat(lastChatQuestion)}
+                    type="button"
+                  >
+                    {isChatLoading ? "重试中..." : "重新发送"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {chatError && chatFailureKind === "input" ? <p className="error">{chatError}</p> : null}
           </section>
         </section>
       ) : null}
