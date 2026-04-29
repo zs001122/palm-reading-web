@@ -98,6 +98,8 @@ async function main() {
         temperature: 0.2,
         max_tokens: 300,
         response_format: { type: "json_object" },
+        enable_thinking: false,
+        extra_body: { enable_thinking: false },
         messages: [
           {
             role: "system",

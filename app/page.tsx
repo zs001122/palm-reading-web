@@ -81,6 +81,8 @@ type SavedReport = {
 type FailureKind = "none" | "network" | "model" | "parse" | "input";
 
 const MAX_FILE_SIZE = 8 * 1024 * 1024;
+const MAX_IMAGE_EDGE = 1280;
+const COMPRESSED_IMAGE_QUALITY = 0.82;
 const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FOCUS_AREAS = 3;
 const MAX_SAVED_REPORTS = 5;
@@ -260,6 +262,56 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function loadImageFromFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("图片读取失败，请换一张照片。"));
+    };
+    image.src = url;
+  });
+}
+
+async function compressImageFile(file: File) {
+  if (!file.type.startsWith("image/")) return file;
+
+  const image = await loadImageFromFile(file);
+  const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(image.naturalWidth, image.naturalHeight));
+
+  if (scale >= 1 && file.size < 900 * 1024) {
+    return file;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const context = canvas.getContext("2d");
+  if (!context) return file;
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", COMPRESSED_IMAGE_QUALITY);
+  });
+
+  if (!blob || blob.size >= file.size) {
+    return file;
+  }
+
+  const baseName = file.name.replace(/\.[^.]+$/, "");
+  return new File([blob], `${baseName}-compressed.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now()
+  });
+}
+
 function classifyFailure(message: string): FailureKind {
   if (!message) return "none";
   if (message.includes("超时") || message.includes("网络")) return "network";
@@ -340,7 +392,7 @@ export default function Home() {
     persistReports([savedReport, ...savedReports.filter((item) => item.id !== id)]);
   }
 
-  function setSelectedFile(nextFile: File | null) {
+  async function setSelectedFile(nextFile: File | null) {
     setError("");
     setFailureKind("none");
     setReading(null);
@@ -375,12 +427,25 @@ export default function Home() {
       return;
     }
 
-    setFile(nextFile);
-    setPreviewUrl(URL.createObjectURL(nextFile));
+    try {
+      const compressedFile = await compressImageFile(nextFile);
+      setFile(compressedFile);
+      setPreviewUrl(URL.createObjectURL(compressedFile));
+      if (compressedFile.size < nextFile.size) {
+        setExportStatus(
+          `已自动压缩图片：${(nextFile.size / 1024 / 1024).toFixed(2)}MB → ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`
+        );
+      }
+    } catch (caught) {
+      setFile(null);
+      setPreviewUrl("");
+      setError(caught instanceof Error ? caught.message : "图片读取失败，请换一张照片。");
+      setFailureKind("input");
+    }
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedFile(event.target.files?.[0] ?? null);
+    void setSelectedFile(event.target.files?.[0] ?? null);
   }
 
   function toggleFocusArea(option: string) {
@@ -688,7 +753,7 @@ export default function Home() {
           <div className="uploadMeta">
             <span>{fileHint}</span>
             {file ? (
-              <button onClick={() => setSelectedFile(null)} type="button">
+              <button onClick={() => void setSelectedFile(null)} type="button">
                 重新选择
               </button>
             ) : null}

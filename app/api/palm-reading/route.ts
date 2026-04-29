@@ -376,13 +376,15 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model,
         temperature: readingStyle === "理性分析" ? 0.62 : 0.82,
-        max_tokens: 2800,
+        max_tokens: 2200,
         response_format: { type: "json_object" },
+        enable_thinking: false,
+        extra_body: { enable_thinking: false },
         messages: [
           {
             role: "system",
             content:
-              "你是一个温暖、细致、有边界感的中文娱乐向手相解析师。你必须先描述照片中可见的客观事实，再基于传统手相语境做自我启发式解读。你不能声称能确定预测命运、疾病、寿命、财富、婚姻结果或考试结果。你不能提供医学诊断、法律建议、投资建议。语气要真诚、具体、鼓励，情绪价值高，但不要恐吓、夸大或制造焦虑。只输出合法 JSON，不要输出 Markdown。"
+              "你是温暖、细致、有边界感的中文娱乐向手相解析师。先写照片可见事实，再做自我启发式解读。禁止确定预测命运、疾病、寿命、财富、婚姻、考试结果；禁止医学、法律、投资建议。回答必须简洁，所有字段控制在 1-3 句内。只输出合法 JSON，不要 Markdown。"
           },
           {
             role: "user",
@@ -399,10 +401,10 @@ export async function POST(request: Request) {
 {
   "summary": "一句话总体画像，温暖但不夸张",
   "keywords": ["3-5 个核心关键词"],
-  "dailyQuote": "今日一句话签文，不要神化，不要恐吓",
+  "dailyQuote": "今日一句话签文，20字内，不要神化，不要恐吓",
   "observations": ["3-8 条照片中能看见的客观事实，不写推测"],
   "palmFeatures": [
-    {"label": "掌型/生命线/智慧线/感情线/事业线/指型/掌丘等", "fact": "可见事实", "insight": "娱乐向启发"}
+    {"label": "掌型/生命线/智慧线/感情线/事业线/指型/掌丘等", "fact": "可见事实，30字内", "insight": "娱乐向启发，50字内"}
   ],
   "scores": {
     "emotionalEnergy": 0-100,
@@ -412,9 +414,9 @@ export async function POST(request: Request) {
     "creativity": 0-100
   },
   "strengthRadar": [
-    {"label": "优势名称", "score": 0-100, "note": "一句解释"}
+    {"label": "优势名称", "score": 0-100, "note": "一句解释，40字内"}
   ],
-  "avoidPitfalls": ["2-4 条近期需要避开的坑，必须是温和行动建议"],
+  "avoidPitfalls": ["2-4 条近期需要避开的坑，每条40字内"],
   "reading": {
     "personality": "性格底色",
     "relationships": "感情关系",
@@ -424,20 +426,20 @@ export async function POST(request: Request) {
     "focus": "围绕用户关注点的专项解读"
   },
   "timeline": {
-    "sevenDays": "未来 7 天行动建议",
-    "thirtyDays": "未来 30 天行动建议",
-    "ninetyDays": "未来 90 天行动建议"
+    "sevenDays": "未来 7 天行动建议，60字内",
+    "thirtyDays": "未来 30 天行动建议，60字内",
+    "ninetyDays": "未来 90 天行动建议，60字内"
   },
   "weeklyPlan": [
-    {"day": "周一", "task": "当天一条很小、可执行的任务"}
+    {"day": "周一", "task": "当天一条很小、可执行的任务，30字内"}
   ],
   "luckyTips": {
     "color": "幸运色",
     "action": "适合做的一件小事",
     "keyword": "提醒关键词"
   },
-  "actionPlan": ["3 条具体可执行建议"],
-  "comfort": "高情绪价值总结",
+  "actionPlan": ["3 条具体可执行建议，每条50字内"],
+  "comfort": "高情绪价值总结，120字内",
   "disclaimer": "仅供娱乐和自我反思，不代表科学判断、医学诊断、法律建议、财务建议或确定性预测。"
 }
 
