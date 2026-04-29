@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { toPng } from "html-to-image";
 
 type PalmFeature = {
   label: string;
@@ -269,6 +270,7 @@ function classifyFailure(message: string): FailureKind {
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const posterRef = useRef<HTMLDivElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [focusAreas, setFocusAreas] = useState<string[]>(["自我状态", "事业发展"]);
@@ -503,6 +505,27 @@ export default function Home() {
     if (!reading) return;
     setExportStatus("正在打开打印窗口，可选择“另存为 PDF”。");
     window.setTimeout(() => window.print(), 80);
+  }
+
+  async function exportPosterPng() {
+    if (!posterRef.current) return;
+
+    setExportStatus("正在生成海报 PNG...");
+
+    try {
+      const dataUrl = await toPng(posterRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#fbfaf8"
+      });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "掌心小读-报告海报.png";
+      link.click();
+      setExportStatus("海报 PNG 已导出。");
+    } catch {
+      setExportStatus("海报导出失败，请尝试打印/PDF。");
+    }
   }
 
   async function submitChat(questionOverride?: string) {
@@ -844,6 +867,9 @@ export default function Home() {
               <button onClick={printReport} type="button">
                 打印/PDF
               </button>
+              <button onClick={exportPosterPng} type="button">
+                导出海报
+              </button>
               <button onClick={copySummary} type="button">
                 复制摘要
               </button>
@@ -853,6 +879,103 @@ export default function Home() {
             </div>
             {exportStatus ? <p>{exportStatus}</p> : null}
           </div>
+
+          <section className="posterSection">
+            <div className="posterIntro">
+              <p className="kicker">海报预览</p>
+              <h3>掌相解读指南</h3>
+              <span>按参考图风格生成的黑白极简报告海报，可导出 PNG 或打印保存。</span>
+            </div>
+
+            <div className="posterCanvas" ref={posterRef}>
+              <div className="posterHero">
+                <div>
+                  <p className="posterEyebrow">✦ PALMISTRY GUIDE</p>
+                  <h2>掌相解读指南</h2>
+                  <span>探索你的天赋 · 性格 · 运势</span>
+                </div>
+                <div className="posterImage">
+                  {previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img alt="手掌海报图片" src={previewUrl} />
+                  ) : (
+                    <span>PALM PHOTO</span>
+                  )}
+                </div>
+                <div className="posterBadges">
+                  <span>理性与分析</span>
+                  <span>行动与执行</span>
+                  <span>创造与表达</span>
+                  <span>人际与魅力</span>
+                </div>
+              </div>
+
+              <div className="posterOverall">
+                <p>整体印象</p>
+                <strong>{reading.summary}</strong>
+                <span>{reading.keywords?.join(" · ") || reading.luckyTips.keyword}</span>
+              </div>
+
+              <div className="posterLines">
+                {reading.palmFeatures.slice(0, 4).map((feature, index) => (
+                  <article key={`${feature.label}-${index}`}>
+                    <div>
+                      <b>{index + 1}</b>
+                      <strong>{feature.label}</strong>
+                      <span>{feature.fact}</span>
+                    </div>
+                    <p>{feature.insight}</p>
+                  </article>
+                ))}
+              </div>
+
+              <div className="posterDiagram">
+                <div>
+                  <p>主要掌纹图解</p>
+                  {reading.palmFeatures.slice(0, 4).map((feature, index) => (
+                    <span key={`${feature.label}-diagram`}>
+                      <b>{index + 1}</b>
+                      {feature.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="handSketch" aria-hidden="true">
+                  <i className="finger f1" />
+                  <i className="finger f2" />
+                  <i className="finger f3" />
+                  <i className="finger f4" />
+                  <i className="thumb" />
+                  <i className="palm" />
+                  <i className="line l1" />
+                  <i className="line l2" />
+                  <i className="line l3" />
+                  <i className="dot d1">1</i>
+                  <i className="dot d2">2</i>
+                  <i className="dot d3">3</i>
+                </div>
+              </div>
+
+              <div className="posterTextCards">
+                <article>
+                  <p>性格与天赋</p>
+                  <span>{reading.reading.personality}</span>
+                </article>
+                <article>
+                  <p>事业与财富</p>
+                  <span>{reading.reading.career} {reading.reading.wealthMindset}</span>
+                </article>
+                <article>
+                  <p>建议与指引</p>
+                  <span>{reading.actionPlan.slice(0, 2).join(" ")}</span>
+                </article>
+              </div>
+
+              <div className="posterFooter">
+                <span>PALMISTRY · INSIGHTS · GUIDANCE</span>
+                <strong>掌纹是先天的地图，而你，永远拥有改写未来的力量。</strong>
+              </div>
+            </div>
+          </section>
 
           <div className="reportBand">
             <div>
