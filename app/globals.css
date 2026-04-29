@@ -32,7 +32,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -249,6 +250,33 @@ h1 {
   margin: 9px 0 0;
 }
 
+.personalizationGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.personalizationGrid label {
+  display: grid;
+  gap: 7px;
+}
+
+.personalizationGrid span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.personalizationGrid select {
+  appearance: none;
+  background: #fffaf5;
+  border: 1px solid #ead8cb;
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 40px;
+  padding: 0 10px;
+}
+
 .primaryButton {
   background: var(--rose);
   border: 0;
@@ -399,6 +427,50 @@ h1 {
   max-width: 880px;
 }
 
+.personalSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -8px 0 20px;
+}
+
+.personalSummary span {
+  background: #fff7ef;
+  border: 1px solid #f0e2d8;
+  border-radius: 999px;
+  color: var(--rose-dark);
+  font-size: 13px;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.highlightPanel {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  margin-bottom: 24px;
+}
+
+.highlightPanel div {
+  background: #eef5f3;
+  border: 1px solid #d6e4e1;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.highlightPanel p {
+  color: var(--sage-dark);
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.highlightPanel strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
 .exportBar {
   align-items: flex-start;
   background: #fbf8f5;
@@ -489,7 +561,10 @@ h1 {
 
 .facts h3,
 .scorePanel h3,
+.radarPanel h3,
 .timeline h3,
+.weeklyPlan h3,
+.pitfallPanel h3,
 .actionPlan h3 {
   font-size: 20px;
   margin-bottom: 14px;
@@ -516,7 +591,8 @@ h1 {
   margin-top: 24px;
 }
 
-.scorePanel > div {
+.scorePanel > div,
+.radarPanel > div {
   background: #fbf8f5;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -525,22 +601,36 @@ h1 {
   padding: 18px;
 }
 
-.scorePanel article {
+.scorePanel article,
+.radarPanel article {
   align-items: center;
   display: grid;
   gap: 12px;
   grid-template-columns: 110px minmax(0, 1fr) 42px;
 }
 
-.scorePanel span {
+.scorePanel span,
+.radarPanel span {
   color: var(--muted);
   font-size: 14px;
   font-weight: 800;
 }
 
-.scorePanel strong {
+.scorePanel strong,
+.radarPanel strong {
   color: var(--rose-dark);
   text-align: right;
+}
+
+.radarPanel {
+  margin-top: 24px;
+}
+
+.radarPanel p {
+  color: var(--muted);
+  grid-column: 2 / -1;
+  line-height: 1.65;
+  margin: -8px 0 0;
 }
 
 .meter {
@@ -593,34 +683,57 @@ h1 {
   line-height: 1.85;
 }
 
-.timeline {
+.timeline,
+.weeklyPlan,
+.pitfallPanel {
   margin-top: 26px;
 }
 
-.timeline > div {
+.timeline > div,
+.weeklyPlan > div {
   display: grid;
   gap: 14px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.timeline article {
+.timeline article,
+.weeklyPlan article {
   background: #f2f6ef;
   border: 1px solid #dce8d9;
   border-radius: 8px;
   padding: 18px;
 }
 
-.timeline strong {
+.timeline strong,
+.weeklyPlan strong {
   color: var(--sage-dark);
   display: block;
   font-size: 20px;
   margin-bottom: 10px;
 }
 
-.timeline p {
+.timeline p,
+.weeklyPlan p {
   color: var(--muted);
   line-height: 1.75;
   margin: 0;
+}
+
+.pitfallPanel ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pitfallPanel li {
+  background: #fff0f1;
+  border: 1px solid #f0c2ca;
+  border-radius: 8px;
+  color: #7e2d3d;
+  line-height: 1.75;
+  padding: 13px 14px;
 }
 
 .actionPlan {
@@ -801,12 +914,15 @@ blockquote {
   .hero,
   .guide,
   .historyList article,
+  .personalizationGrid,
+  .highlightPanel,
   .exportBar,
   .reportBand,
   .facts ul,
   .featureGrid,
   .readingGrid,
-  .timeline > div {
+  .timeline > div,
+  .weeklyPlan > div {
     grid-template-columns: 1fr;
   }
 
@@ -848,11 +964,17 @@ blockquote {
     padding: 14px;
   }
 
-  .scorePanel article {
+  .scorePanel article,
+  .radarPanel article {
     grid-template-columns: 1fr 38px;
   }
 
-  .scorePanel span {
+  .scorePanel span,
+  .radarPanel span {
+    grid-column: 1 / -1;
+  }
+
+  .radarPanel p {
     grid-column: 1 / -1;
   }
 
@@ -889,7 +1011,8 @@ blockquote {
 
   .featureGrid,
   .readingGrid,
-  .timeline > div {
+  .timeline > div,
+  .weeklyPlan > div {
     grid-template-columns: 1fr;
   }
 
@@ -899,6 +1022,8 @@ blockquote {
   .featureGrid article,
   .readingGrid article,
   .timeline article,
+  .weeklyPlan article,
+  .pitfallPanel li,
   .actionPlan li,
   .chatMessages article,
   blockquote {

@@ -8,8 +8,21 @@ type PalmFeature = {
   insight: string;
 };
 
+type RadarItem = {
+  label: string;
+  score: number;
+  note: string;
+};
+
+type WeeklyPlanItem = {
+  day: string;
+  task: string;
+};
+
 type PalmReading = {
   summary: string;
+  keywords?: string[];
+  dailyQuote?: string;
   observations: string[];
   palmFeatures: PalmFeature[];
   scores: {
@@ -19,6 +32,8 @@ type PalmReading = {
     stability: number;
     creativity: number;
   };
+  strengthRadar?: RadarItem[];
+  avoidPitfalls?: string[];
   reading: {
     personality: string;
     relationships: string;
@@ -32,6 +47,7 @@ type PalmReading = {
     thirtyDays: string;
     ninetyDays: string;
   };
+  weeklyPlan?: WeeklyPlanItem[];
   luckyTips: {
     color: string;
     action: string;
@@ -54,6 +70,9 @@ type SavedReport = {
   id: string;
   createdAt: string;
   focusAreas: string[];
+  handPreference?: string;
+  currentSituation?: string;
+  readingStyle?: string;
   reading: PalmReading;
   chatMessages: ChatMessage[];
 };
@@ -66,12 +85,21 @@ const MAX_CHAT_MESSAGES = 20;
 const STORAGE_KEY = "palm-reading-reports-v1";
 
 const focusOptions = ["感情关系", "事业发展", "财富观念", "学业成长", "自我状态", "人际贵人"];
+const handOptions = ["左手", "右手", "不确定"];
+const situationOptions = ["工作中", "学生", "创业", "情感困惑", "低能量期", "探索方向"];
+const styleOptions = ["温柔鼓励", "直接清醒", "玄学沉浸", "理性分析"];
 const quickQuestions = [
   "这份报告里最该听进去的一句话是什么？",
   "最近感情关系上我该注意什么？",
   "事业上我适合主动一点吗？",
   "接下来 7 天最适合做哪件小事？"
 ];
+
+const personalizationLabels = {
+  handPreference: "手别",
+  currentSituation: "当前状态",
+  readingStyle: "解析风格"
+};
 
 const scoreSections: Array<{
   key: keyof PalmReading["scores"];
@@ -119,11 +147,21 @@ function formatReportAsText(reading: PalmReading, chatMessages: ChatMessage[] = 
   const timeline = timelineSections
     .map((section) => `${section.title}：${reading.timeline[section.key]}`)
     .join("\n");
+  const keywords = reading.keywords?.length ? reading.keywords.join("、") : "暂无";
+  const radar =
+    reading.strengthRadar
+      ?.map((item) => `${item.label}：${item.score}/100，${item.note}`)
+      .join("\n") || "暂无";
+  const pitfalls = reading.avoidPitfalls?.map((item, index) => `${index + 1}. ${item}`) ?? [];
+  const weeklyPlan = reading.weeklyPlan?.map((item) => `${item.day}：${item.task}`) ?? [];
 
   return [
     "掌心小读｜掌心报告",
     "",
     reading.summary,
+    "",
+    `核心关键词：${keywords}`,
+    `今日签文：${reading.dailyQuote ?? "暂无"}`,
     "",
     "幸运提示",
     `幸运色：${reading.luckyTips.color}`,
@@ -136,6 +174,9 @@ function formatReportAsText(reading: PalmReading, chatMessages: ChatMessage[] = 
     "娱乐向能量评分",
     scoreText,
     "",
+    "优势雷达",
+    radar,
+    "",
     "掌纹细项",
     features,
     "",
@@ -144,6 +185,12 @@ function formatReportAsText(reading: PalmReading, chatMessages: ChatMessage[] = 
     "",
     "接下来的节奏",
     timeline,
+    "",
+    "本周行动计划",
+    ...weeklyPlan,
+    "",
+    "近期需要避开的坑",
+    ...pitfalls,
     "",
     "行动清单",
     ...reading.actionPlan.map((item, index) => `${index + 1}. ${item}`),
@@ -161,10 +208,14 @@ function formatShareText(reading: PalmReading) {
   return [
     "我的掌心小读报告",
     reading.summary,
+    reading.keywords?.length ? `关键词：${reading.keywords.join("、")}` : "",
+    reading.dailyQuote ? `今日签文：${reading.dailyQuote}` : "",
     `关键词：${reading.luckyTips.keyword}`,
     `适合行动：${reading.luckyTips.action}`,
     reading.disclaimer
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function downloadTextFile(filename: string, content: string, type: string) {
@@ -211,6 +262,9 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [focusAreas, setFocusAreas] = useState<string[]>(["自我状态", "事业发展"]);
+  const [handPreference, setHandPreference] = useState("不确定");
+  const [currentSituation, setCurrentSituation] = useState("探索方向");
+  const [readingStyle, setReadingStyle] = useState("温柔鼓励");
   const [reading, setReading] = useState<PalmReading | null>(null);
   const [currentReportId, setCurrentReportId] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -252,13 +306,17 @@ export default function Home() {
     nextReading: PalmReading,
     nextFocusAreas: string[],
     nextChatMessages: ChatMessage[],
-    reportId = currentReportId || createId()
+    reportId = currentReportId || createId(),
+    nextPersonalization = { handPreference, currentSituation, readingStyle }
   ) {
     const id = reportId;
     const savedReport: SavedReport = {
       id,
       createdAt: new Date().toISOString(),
       focusAreas: nextFocusAreas,
+      handPreference: nextPersonalization.handPreference,
+      currentSituation: nextPersonalization.currentSituation,
+      readingStyle: nextPersonalization.readingStyle,
       reading: nextReading,
       chatMessages: nextChatMessages.slice(-MAX_CHAT_MESSAGES)
     };
@@ -344,6 +402,9 @@ export default function Home() {
     const body = new FormData();
     body.append("image", file);
     body.append("focusAreas", JSON.stringify(focusAreas));
+    body.append("handPreference", handPreference);
+    body.append("currentSituation", currentSituation);
+    body.append("readingStyle", readingStyle);
 
     try {
       const response = await fetch("/api/palm-reading", {
@@ -359,7 +420,11 @@ export default function Home() {
       const nextReading = payload as PalmReading;
       const nextReportId = createId();
       setReading(nextReading);
-      saveReportSnapshot(nextReading, focusAreas, [], nextReportId);
+      saveReportSnapshot(nextReading, focusAreas, [], nextReportId, {
+        handPreference,
+        currentSituation,
+        readingStyle
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "解析失败，请稍后重试。");
     } finally {
@@ -377,7 +442,7 @@ export default function Home() {
     if (!reading) return;
     downloadTextFile(
       "掌心小读-分析报告.json",
-      JSON.stringify({ reading, focusAreas, chatMessages }, null, 2),
+      JSON.stringify({ reading, focusAreas, handPreference, currentSituation, readingStyle, chatMessages }, null, 2),
       "application/json;charset=utf-8"
     );
     setExportStatus("JSON 数据已导出。");
@@ -451,7 +516,10 @@ export default function Home() {
         body: JSON.stringify({
           report: reading,
           question,
-          focusAreas
+          focusAreas,
+          handPreference,
+          currentSituation,
+          readingStyle
         })
       });
       const payload = await response.json();
@@ -469,7 +537,11 @@ export default function Home() {
       };
       const completedMessages = [...nextMessages, assistantMessage].slice(-MAX_CHAT_MESSAGES);
       setChatMessages(completedMessages);
-      saveReportSnapshot(reading, focusAreas, completedMessages);
+      saveReportSnapshot(reading, focusAreas, completedMessages, currentReportId, {
+        handPreference,
+        currentSituation,
+        readingStyle
+      });
     } catch (caught) {
       setChatMessages(chatMessages);
       setChatError(caught instanceof Error ? caught.message : "追问失败，请稍后重试。");
@@ -482,6 +554,9 @@ export default function Home() {
     setReading(savedReport.reading);
     setCurrentReportId(savedReport.id);
     setFocusAreas(savedReport.focusAreas);
+    setHandPreference(savedReport.handPreference ?? "不确定");
+    setCurrentSituation(savedReport.currentSituation ?? "探索方向");
+    setReadingStyle(savedReport.readingStyle ?? "温柔鼓励");
     setChatMessages(savedReport.chatMessages ?? []);
     setChatInput("");
     setChatError("");
@@ -576,6 +651,39 @@ export default function Home() {
             <p>已选择：{selectedFocusText}</p>
           </fieldset>
 
+          <div className="personalizationGrid">
+            <label>
+              <span>{personalizationLabels.handPreference}</span>
+              <select value={handPreference} onChange={(event) => setHandPreference(event.target.value)}>
+                {handOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{personalizationLabels.currentSituation}</span>
+              <select value={currentSituation} onChange={(event) => setCurrentSituation(event.target.value)}>
+                {situationOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{personalizationLabels.readingStyle}</span>
+              <select value={readingStyle} onChange={(event) => setReadingStyle(event.target.value)}>
+                {styleOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           <button className="primaryButton" disabled={!file || isLoading} type="submit">
             {isLoading ? "正在生成完整报告..." : "开始解析"}
           </button>
@@ -618,7 +726,7 @@ export default function Home() {
                   <strong>{savedReport.reading.summary}</strong>
                   <span>
                     {formatDateTime(savedReport.createdAt)} · {savedReport.focusAreas.join("、")} ·{" "}
-                    {savedReport.chatMessages.length} 条追问
+                    {savedReport.readingStyle ?? "温柔鼓励"} · {savedReport.chatMessages.length} 条追问
                   </span>
                 </div>
                 <div>
@@ -641,6 +749,25 @@ export default function Home() {
             <p className="kicker">掌心报告</p>
             <h2>{reading.summary}</h2>
           </div>
+
+          <div className="personalSummary">
+            <span>{handPreference}</span>
+            <span>{currentSituation}</span>
+            <span>{readingStyle}</span>
+          </div>
+
+          {(reading.keywords?.length || reading.dailyQuote) ? (
+            <div className="highlightPanel">
+              <div>
+                <p>核心关键词</p>
+                <strong>{reading.keywords?.join("、") || reading.luckyTips.keyword}</strong>
+              </div>
+              <div>
+                <p>今日一句话签文</p>
+                <strong>{reading.dailyQuote ?? "把注意力收回到你能行动的一小步里。"}</strong>
+              </div>
+            </div>
+          ) : null}
 
           <div className="exportBar">
             <div>
@@ -709,6 +836,24 @@ export default function Home() {
             </div>
           </div>
 
+          {reading.strengthRadar?.length ? (
+            <div className="radarPanel">
+              <h3>优势雷达</h3>
+              <div>
+                {reading.strengthRadar.map((item) => (
+                  <article key={`${item.label}-${item.score}`}>
+                    <span>{item.label}</span>
+                    <div className="meter" aria-label={`${item.label} ${item.score} 分`}>
+                      <i style={{ width: `${item.score}%` }} />
+                    </div>
+                    <strong>{item.score}</strong>
+                    <p>{item.note}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="featureGrid">
             {reading.palmFeatures.map((feature) => (
               <article key={`${feature.label}-${feature.fact}`}>
@@ -740,6 +885,31 @@ export default function Home() {
               ))}
             </div>
           </div>
+
+          {reading.weeklyPlan?.length ? (
+            <div className="weeklyPlan">
+              <h3>本周行动计划</h3>
+              <div>
+                {reading.weeklyPlan.map((item) => (
+                  <article key={`${item.day}-${item.task}`}>
+                    <strong>{item.day}</strong>
+                    <p>{item.task}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {reading.avoidPitfalls?.length ? (
+            <div className="pitfallPanel">
+              <h3>近期需要避开的坑</h3>
+              <ul>
+                {reading.avoidPitfalls.map((item, index) => (
+                  <li key={`${item}-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="actionPlan">
             <h3>把好运落到行动里</h3>
