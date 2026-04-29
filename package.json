@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:vision": "node scripts/test-vision-model.mjs"
   },
   "dependencies": {
     "html-to-image": "^1.11.13",
