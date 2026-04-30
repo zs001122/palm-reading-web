@@ -871,6 +871,195 @@ h1 {
   text-align: center;
 }
 
+.posterCanvas {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-areas:
+    "masthead masthead"
+    "photo summary"
+    "diagram lines"
+    "text text"
+    "footer footer";
+}
+
+.posterMasthead,
+.posterPhotoCard,
+.posterSummaryCard,
+.posterLineList,
+.posterDiagram,
+.posterTextCards article,
+.posterFooter {
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid #bdb8b2;
+  border-radius: 8px;
+}
+
+.posterMasthead {
+  align-items: end;
+  display: grid;
+  gap: 18px;
+  grid-area: masthead;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 20px 24px;
+}
+
+.posterMasthead p {
+  border-bottom: 1px solid #a9a49e;
+  color: #555;
+  font-size: 13px;
+  margin: 0;
+  padding-bottom: 8px;
+}
+
+.posterMasthead h2 {
+  font-family: Georgia, "Times New Roman", "SimSun", serif;
+  font-size: clamp(42px, 5vw, 64px);
+  font-weight: 400;
+  line-height: 1;
+  margin: 0;
+  text-align: center;
+}
+
+.posterMasthead span {
+  color: #555;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.posterPhotoCard {
+  display: grid;
+  gap: 16px;
+  grid-area: photo;
+  padding: 18px;
+}
+
+.posterSummaryCard {
+  display: grid;
+  gap: 14px;
+  grid-area: summary;
+  padding: 22px;
+}
+
+.posterSummaryCard p,
+.posterDiagramLegend p,
+.posterTextCards p {
+  font-family: Georgia, "Times New Roman", "SimSun", serif;
+  font-size: 25px;
+  margin-bottom: 0;
+}
+
+.posterSummaryCard strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.85;
+}
+
+.posterSummaryCard div {
+  border-top: 1px solid #d5d0ca;
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.posterSummaryCard span,
+.posterLineList span,
+.posterLineList p,
+.posterTextCards span {
+  color: #555;
+}
+
+.posterSummaryCard b {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.65;
+}
+
+.posterDiagram {
+  grid-area: diagram;
+  grid-template-columns: minmax(0, 0.72fr) minmax(210px, 1fr);
+  min-height: 330px;
+}
+
+.posterDiagramLegend {
+  align-self: stretch;
+  display: grid;
+  gap: 10px;
+}
+
+.posterDiagramLegend span {
+  margin-top: 0;
+}
+
+.posterLineList {
+  display: grid;
+  grid-area: lines;
+  padding: 0 18px;
+}
+
+.posterLineList article {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+  padding: 15px 0;
+}
+
+.posterLineList article + article {
+  border-top: 1px solid #d5d0ca;
+}
+
+.posterLineList div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.posterLineList b {
+  align-items: center;
+  background: #111;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 21px;
+  font-size: 11px;
+  height: 21px;
+  justify-content: center;
+  width: 21px;
+}
+
+.posterLineList strong {
+  font-size: 18px;
+}
+
+.posterLineList span,
+.posterLineList p {
+  line-height: 1.62;
+  margin: 0;
+}
+
+.posterTextCards {
+  grid-area: text;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.posterTextCards article {
+  min-height: 170px;
+  padding: 20px;
+}
+
+.posterTextCards p {
+  margin-bottom: 10px;
+}
+
+.posterTextCards span {
+  line-height: 1.72;
+}
+
+.posterFooter {
+  grid-area: footer;
+}
+
 .reportBand {
   display: grid;
   gap: 12px;
@@ -1260,6 +1449,8 @@ blockquote {
   .personalizationGrid,
   .highlightPanel,
   .posterCanvas,
+  .posterMasthead,
+  .posterTextCards,
   .posterLines article,
   .posterDiagram,
   .posterFooter,
@@ -1303,6 +1494,22 @@ blockquote {
 
   .posterBadges {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .posterCanvas {
+    grid-template-areas:
+      "masthead"
+      "photo"
+      "summary"
+      "diagram"
+      "lines"
+      "text"
+      "footer";
+  }
+
+  .posterMasthead h2,
+  .posterMasthead span {
+    text-align: left;
   }
 }
 
@@ -1373,6 +1580,10 @@ blockquote {
   }
 
   .reportBand,
+  .posterMasthead,
+  .posterPhotoCard,
+  .posterSummaryCard,
+  .posterLineList,
   .posterHero,
   .posterOverall,
   .posterLines,

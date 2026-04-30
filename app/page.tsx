@@ -262,6 +262,16 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function clipText(value: string | undefined, maxLength: number) {
+  const text = (value ?? "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}...`;
+}
+
+function getPosterFeature(reading: PalmReading, index: number, fallback: string) {
+  return reading.palmFeatures[index] ?? { label: fallback, fact: "照片中未能稳定识别该掌纹细节。", insight: "可把它当作自我观察的提醒，而不是确定判断。" };
+}
+
 function loadImageFromFile(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -953,12 +963,13 @@ export default function Home() {
             </div>
 
             <div className="posterCanvas" ref={posterRef}>
-              <div className="posterHero">
-                <div>
-                  <p className="posterEyebrow">✦ PALMISTRY GUIDE</p>
-                  <h2>掌相解读指南</h2>
-                  <span>探索你的天赋 · 性格 · 运势</span>
-                </div>
+              <header className="posterMasthead">
+                <p>✦ PALMISTRY GUIDE</p>
+                <h2>掌相解读指南</h2>
+                <span>{reading.keywords?.slice(0, 4).join(" · ") || reading.luckyTips.keyword}</span>
+              </header>
+
+              <section className="posterPhotoCard">
                 <div className="posterImage">
                   {previewUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -973,36 +984,33 @@ export default function Home() {
                   <span>创造与表达</span>
                   <span>人际与魅力</span>
                 </div>
-              </div>
+              </section>
 
-              <div className="posterOverall">
+              <section className="posterSummaryCard">
                 <p>整体印象</p>
-                <strong>{reading.summary}</strong>
-                <span>{reading.keywords?.join(" · ") || reading.luckyTips.keyword}</span>
-              </div>
-
-              <div className="posterLines">
-                {reading.palmFeatures.slice(0, 4).map((feature, index) => (
-                  <article key={`${feature.label}-${index}`}>
-                    <div>
-                      <b>{index + 1}</b>
-                      <strong>{feature.label}</strong>
-                      <span>{feature.fact}</span>
-                    </div>
-                    <p>{feature.insight}</p>
-                  </article>
-                ))}
-              </div>
-
-              <div className="posterDiagram">
+                <strong>{clipText(reading.summary, 90)}</strong>
                 <div>
+                  <span>今日签文</span>
+                  <b>{clipText(reading.dailyQuote || reading.luckyTips.keyword, 34)}</b>
+                </div>
+                <div>
+                  <span>幸运提示</span>
+                  <b>{reading.luckyTips.color} · {reading.luckyTips.action}</b>
+                </div>
+              </section>
+
+              <section className="posterDiagram">
+                <div className="posterDiagramLegend">
                   <p>主要掌纹图解</p>
-                  {reading.palmFeatures.slice(0, 4).map((feature, index) => (
-                    <span key={`${feature.label}-diagram`}>
-                      <b>{index + 1}</b>
-                      {feature.label}
-                    </span>
-                  ))}
+                  {[0, 1, 2, 3].map((index) => {
+                    const feature = getPosterFeature(reading, index, ["感情线", "智慧线", "生命线", "命运线"][index]);
+                    return (
+                      <span key={`${feature.label}-diagram`}>
+                        <b>{index + 1}</b>
+                        {feature.label}
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="handSketch" aria-hidden="true">
                   <i className="finger f1" />
@@ -1018,27 +1026,43 @@ export default function Home() {
                   <i className="dot d2">2</i>
                   <i className="dot d3">3</i>
                 </div>
-              </div>
+              </section>
 
-              <div className="posterTextCards">
+              <section className="posterLineList">
+                {[0, 1, 2, 3].map((index) => {
+                  const feature = getPosterFeature(reading, index, ["感情线", "智慧线", "生命线", "命运线"][index]);
+                  return (
+                    <article key={`${feature.label}-${index}`}>
+                      <div>
+                        <b>{index + 1}</b>
+                        <strong>{feature.label}</strong>
+                      </div>
+                      <span>{clipText(feature.fact, 34)}</span>
+                      <p>{clipText(feature.insight, 56)}</p>
+                    </article>
+                  );
+                })}
+              </section>
+
+              <section className="posterTextCards">
                 <article>
                   <p>性格与天赋</p>
-                  <span>{reading.reading.personality}</span>
+                  <span>{clipText(reading.reading.personality, 100)}</span>
                 </article>
                 <article>
                   <p>事业与财富</p>
-                  <span>{reading.reading.career} {reading.reading.wealthMindset}</span>
+                  <span>{clipText(`${reading.reading.career} ${reading.reading.wealthMindset}`, 110)}</span>
                 </article>
                 <article>
                   <p>建议与指引</p>
-                  <span>{reading.actionPlan.slice(0, 2).join(" ")}</span>
+                  <span>{clipText(reading.actionPlan.slice(0, 2).join(" "), 100)}</span>
                 </article>
-              </div>
+              </section>
 
-              <div className="posterFooter">
+              <footer className="posterFooter">
                 <span>PALMISTRY · INSIGHTS · GUIDANCE</span>
                 <strong>掌纹是先天的地图，而你，永远拥有改写未来的力量。</strong>
-              </div>
+              </footer>
             </div>
           </section>
 
